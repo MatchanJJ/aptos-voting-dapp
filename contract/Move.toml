@@ -1,0 +1,13 @@
+[package]
+name = "Votes"
+version = "1.0.0"
+authors = []
+
+[addresses]
+voting_addr = "_"
+test_addr = "0x2"
+
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", rev = "devnet", subdir = "aptos-move/framework/aptos-framework" }
+
+[dev-dependencies]
