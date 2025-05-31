@@ -41,7 +41,7 @@ module voting_addr::Voting {
         next_id: u64,
     }
 
-    public entry fun init(account: &signer) {
+    fun init_module(account: &signer) {
         let store = ProposalStore {
             proposals: table::new<u64, Proposal>(),
             next_id: 0,
@@ -74,7 +74,7 @@ module voting_addr::Voting {
 
 
         let signer_address = signer::address_of(creator);
-        let store = borrow_global_mut<ProposalStore>(signer_address);
+        let store = borrow_global_mut<ProposalStore>(@voting_addr);
         let id = store.next_id;
 
         let vote_table = table::new<u64, u64>();
@@ -111,12 +111,11 @@ module voting_addr::Voting {
 
     public entry fun vote(
         voter: &signer,
-        contract_addr: address,
         proposal_id: u64,
         option_id: u64,
     ) acquires ProposalStore {
         let addr = signer::address_of(voter);
-        let store = borrow_global_mut<ProposalStore>(contract_addr);
+        let store = borrow_global_mut<ProposalStore>(@voting_addr);
         let proposal = table::borrow_mut(&mut store.proposals, proposal_id);
         assert!(timestamp::now_seconds() < proposal.deadline, EPROPOSAL_ENDED);
 
@@ -136,7 +135,7 @@ module voting_addr::Voting {
         proposal_id: u64,
         option_id: u64
     ): u64 acquires ProposalStore {
-        let store = borrow_global<ProposalStore>(account);
+        let store = borrow_global<ProposalStore>(@voting_addr);
         let proposal = table::borrow(&store.proposals, proposal_id);
         *table::borrow(&proposal.votes, option_id)
     }

@@ -1,4 +1,6 @@
 ## Create Aptos Dapp Boilerplate Template
+Transaction submitted: https://explorer.aptoslabs.com/txn/0xe5155ecad3af5da774998af5230e620b5096d51ed78de4cb74a015c2c546ba71
+Code was successfully deployed to object address 0x47e1cd653e47058ab00af31ce337935ab3710d53cf65db6ab41f8ae6390b9712
 
 The Boilerplate template provides a starter dapp with all necessary dapp infrastructure and a simple wallet info implementation, transfer APT and a simple message board functionality to send and read a message on chain.
 
