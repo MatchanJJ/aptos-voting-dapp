@@ -1,5 +1,6 @@
 module voting_addr::Voting {
     use std::vector;
+    use std::string::{Self, String};
     use aptos_std::table::{Self, Table};
     use aptos_framework::signer;
     use aptos_framework::timestamp;
@@ -20,14 +21,14 @@ module voting_addr::Voting {
 
     struct Option has key, store, copy, drop {
         id: u64,
-        name: vector<u8>,
+        name: String,
     }
 
     struct Proposal has key, store {
         id: u64,
         creator: address,
-        title: vector<u8>,
-        description: vector<u8>,
+        title: String,
+        description: String,
         proposal_type: ProposalType,
         options: vector<Option>,
         votes: Table<u64, u64>, // id => count
@@ -51,18 +52,22 @@ module voting_addr::Voting {
 
     public entry fun create_proposal(
         creator: &signer,
-        title: vector<u8>,
-        description: vector<u8>,
-        proposal_type_u8: u8,
-        options: vector<vector<u8>>,
+        contract_addr: address,
+        title: String,
+        description: String,
+        proposal_type_u8: u64,  
+        options: vector<String>,
         deadline: u64,
     ) acquires ProposalStore {
-        assert!(deadline > timestamp::now_seconds(), EDEADLINE_PASSED);
-        assert!(vector::length(&options) > 0, ENOT_ENOUGH_OPTION);
-        assert!(vector::length(&title) > 0, ENO_TITLE);
-        assert!(vector::length(&description) > 0, ENO_DESCRIPTION);
+        
+        let current_time = timestamp::now_seconds();
+        assert!(deadline > current_time, EDEADLINE_PASSED);
 
-        // Convert u8 to ProposalType enum
+        assert!(vector::length(&options) > 0, ENOT_ENOUGH_OPTION);
+        assert!(!string::is_empty(&title), ENO_TITLE);
+        assert!(!string::is_empty(&description), ENO_DESCRIPTION);
+
+        // Convert proposal type with explicit checks
         let proposal_type: ProposalType;
         if (proposal_type_u8 == 0) {
             proposal_type = ProposalType::General;
@@ -74,7 +79,7 @@ module voting_addr::Voting {
 
 
         let signer_address = signer::address_of(creator);
-        let store = borrow_global_mut<ProposalStore>(@voting_addr);
+        let store = borrow_global_mut<ProposalStore>(contract_addr);
         let id = store.next_id;
 
         let vote_table = table::new<u64, u64>();
@@ -111,11 +116,12 @@ module voting_addr::Voting {
 
     public entry fun vote(
         voter: &signer,
+        contract_addr: address,
         proposal_id: u64,
         option_id: u64,
     ) acquires ProposalStore {
         let addr = signer::address_of(voter);
-        let store = borrow_global_mut<ProposalStore>(@voting_addr);
+        let store = borrow_global_mut<ProposalStore>(contract_addr);
         let proposal = table::borrow_mut(&mut store.proposals, proposal_id);
         assert!(timestamp::now_seconds() < proposal.deadline, EPROPOSAL_ENDED);
 
@@ -129,27 +135,27 @@ module voting_addr::Voting {
     }
 
     //getter function
-
+    #[view]
     public fun get_vote_count_per_candidate(
         account: address,
         proposal_id: u64,
         option_id: u64
     ): u64 acquires ProposalStore {
-        let store = borrow_global<ProposalStore>(@voting_addr);
+        let store = borrow_global<ProposalStore>(account);
         let proposal = table::borrow(&store.proposals, proposal_id);
         *table::borrow(&proposal.votes, option_id)
     }
 
-
+    #[view]
     public fun get_proposal_count(account: address): u64 acquires ProposalStore {
         let store = borrow_global<ProposalStore>(account);
         store.next_id
     }
-
+    #[view]
     public fun get_proposal_info(
         account: address,
         proposal_id: u64
-    ): (u64, address, vector<u8>, vector<u8>, ProposalType, vector<Option>, u64, bool) 
+    ): (u64, address, String, String, ProposalType, vector<Option>, u64, bool) 
     acquires ProposalStore {
         let store = borrow_global<ProposalStore>(account);
         let proposal = table::borrow(&store.proposals, proposal_id);
@@ -166,7 +172,7 @@ module voting_addr::Voting {
             proposal.executed
         )
     }
-
+    #[view]
     public fun get_proposal_total_votes(
         account: address,
         proposal_id: u64
@@ -184,6 +190,7 @@ module voting_addr::Voting {
     }
 
     // Function to check if a user has voted
+    #[view]
     public fun has_voted(
         account: address,
         proposal_id: u64,
@@ -195,6 +202,7 @@ module voting_addr::Voting {
     }
 
     // Function to get proposal active status
+    #[view]
     public fun is_active(
         account: address,
         proposal_id: u64
@@ -204,14 +212,37 @@ module voting_addr::Voting {
         !proposal.executed && (timestamp::now_seconds() < proposal.deadline)
     }
     // Add getter for option details
+    #[view]
     public fun get_option(
         account: address,
         proposal_id: u64,
         option_id: u64
-    ): (u64, vector<u8>) acquires ProposalStore {
+    ): (u64, String) acquires ProposalStore {
         let store = borrow_global<ProposalStore>(account);
         let proposal = table::borrow(&store.proposals, proposal_id);
         let option = vector::borrow(&proposal.options, option_id);
         (option.id, option.name)
+    }
+
+    // Mark a proposal as executed
+    public entry fun execute_proposal(
+        executor: &signer,
+        contract_addr: address,
+        proposal_id: u64
+    ) acquires ProposalStore {
+        // Only proposal creator or contract owner can execute
+        let executor_address = signer::address_of(executor);
+        let store = borrow_global_mut<ProposalStore>(contract_addr);
+        let proposal = table::borrow_mut(&mut store.proposals, proposal_id);
+
+        // Ensure proposal deadline has passed
+        assert!(timestamp::now_seconds() >= proposal.deadline, EPROPOSAL_ENDED);
+        // Ensure proposal hasn't already been executed
+        assert!(!proposal.executed, EPROPOSAL_ENDED);
+        // Ensure executor is either the proposal creator or contract owner
+        assert!(executor_address == proposal.creator || executor_address == contract_addr, 0);
+
+        // Mark proposal as executed
+        proposal.executed = true;
     }
 }
