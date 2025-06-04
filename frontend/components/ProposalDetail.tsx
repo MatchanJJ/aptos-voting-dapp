@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { AptosClient } from "aptos";
-import { getProposalById, hasVoted, getProposalStatus, getVoteCount, getTotalVotes } from '../view-functions';
+import { getProposalById, hasVoted, getProposalStatus, getVoteCount, getTotalVotes, getWinningOption, type WinningOption } from '../view-functions';
 import { vote } from '../entry-functions/vote';
 import { Proposal } from '../types/proposal';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ const ProposalDetail: React.FC = () => {
     const [votingInProgress, setVotingInProgress] = useState(false);
     const [voteCounts, setVoteCounts] = useState<Record<number, number>>({});
     const [totalVotes, setTotalVotes] = useState<number>(0);
+    const [winningOption, setWinningOption] = useState<WinningOption | null>(null);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -42,7 +43,6 @@ const ProposalDetail: React.FC = () => {
 
                 setProposal({ ...proposalData, isActive: status.isActive });
 
-                // Geting the vote counts for each option
                 const votesPromises = proposalData.options.map(option =>
                     getVoteCount(Number(id), option.id)
                 );
@@ -53,13 +53,34 @@ const ProposalDetail: React.FC = () => {
                 }, {} as Record<number, number>);
                 setVoteCounts(voteCountsMap);
 
-                // Geting the total votes
                 const total = await getTotalVotes(Number(id));
                 setTotalVotes(total);
 
-                // Checking if the user has voted
+                if (!status.isActive) {
+                    const winner = await getWinningOption(Number(id));
+                    setWinningOption(winner);
+                }
+
                 const voted = await hasVoted(Number(id), account.address.toString());
                 setHasUserVoted(voted);
+
+                if (status.isActive && proposalData.deadline) {
+                    const now = Date.now() / 1000; // Convert to seconds
+                    const timeUntilDeadline = proposalData.deadline - now;
+
+                    if (timeUntilDeadline > 0) {
+                        const timeoutId = setTimeout(async () => {
+                            const newStatus = await getProposalStatus(Number(id));
+                            if (!newStatus.isActive) {
+                                const winner = await getWinningOption(Number(id));
+                                setWinningOption(winner);
+                                setProposal(prev => prev ? { ...prev, isActive: false } : null);
+                            }
+                        }, timeUntilDeadline * 1000); 
+
+                        return () => clearTimeout(timeoutId);
+                    }
+                }
             } catch (err) {
                 setError('Error fetching proposal details');
                 console.error('Error:', err);
@@ -82,7 +103,7 @@ const ProposalDetail: React.FC = () => {
             });
 
             const response = await signAndSubmitTransaction(payload);
-            
+
             const client = new AptosClient('https://fullnode.testnet.aptoslabs.com');
             await client.waitForTransaction(response.hash);
 
@@ -168,9 +189,15 @@ const ProposalDetail: React.FC = () => {
                                         </div>
                                     </Button>
                                 ))}
-                            </div>
-                            <div className="mt-2 text-sm text-gray-500 text-right">
-                                Total votes: {totalVotes}
+                            </div>                            <div className="mt-2 text-sm text-right">
+                                {!proposal.isActive && (
+                                    <div className="text-blue-600 font-semibold mb-2">
+                                        Winning Option: {winningOption?.name} ({winningOption?.votes} votes)
+                                    </div>
+                                )}
+                                <div className="text-gray-500">
+                                    Total votes: {totalVotes}
+                                </div>
                             </div>
                         </div>
 

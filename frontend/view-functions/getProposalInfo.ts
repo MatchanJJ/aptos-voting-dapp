@@ -10,11 +10,13 @@ export const getProposals = async (): Promise<Proposal[]> => {
             functionArguments: [CONTRACT_ADDRESS]
         };
 
-        const [count] = await aptos.view({ payload: countPayload });
+        const result = await aptos.view({ payload: countPayload });
+        console.log("Raw count result:", result);
+        const [count] = result;
         console.log("Total proposals count:", count);
         const proposals: Proposal[] = [];
 
-        // Retrieving proposal by id++
+        // Retrieving proposal by id
         for (let i = 0; i < Number(count); i++) {
             const proposal = await getProposalById(i);
             if (proposal) {
@@ -39,12 +41,12 @@ export const getProposalById = async (proposalId: number): Promise<Proposal | nu
         const proposalData = await aptos.view({ payload: payload });
         console.log(`Raw proposal data for ID ${proposalId}:`, proposalData);
 
-        if (!proposalData || proposalData.length < 8) {
+        if (!proposalData || proposalData.length < 7) {
             console.warn(`Invalid proposal data for ID ${proposalId}`);
             return null;
         }
 
-        const [id, creator, title, description, proposalType, options, deadline, executed] = proposalData;
+        const [id, creator, title, description, proposalType, options, deadline] = proposalData;
 
         return {
             id: Number(id),
@@ -59,10 +61,10 @@ export const getProposalById = async (proposalId: number): Promise<Proposal | nu
                 }))
                 : [],
             deadline: Number(deadline),
-            executed: Boolean(executed),
         };
     } catch (error) {
         console.error(`Error fetching proposal ${proposalId}:`, error);
         return null;
     }
 };
+

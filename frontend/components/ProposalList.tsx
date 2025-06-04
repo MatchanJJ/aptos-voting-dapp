@@ -16,7 +16,9 @@ export const ProposalList: React.FC<ProposalListProps> = ({ filter }) => {
 
     useEffect(() => {
         const fetchProposals = async () => {
+            setLoading(true);
             try {
+                console.log("Starting to fetch proposals...");
                 const data = await getProposals();
                 console.log("Fetched Proposals:", data);
                 if (data && data.length > 0) {

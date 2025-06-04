@@ -13,6 +13,11 @@ module voting_addr::Voting {
     const ENO_DESCRIPTION: u64 = 5;
     const EPROPOSAL_ID_NOT_FOUND: u64 = 6;
     const EINVALID_PROPOSAL_TYPE: u64 = 7;
+    const EDEADLINE_NOT_PASSED: u64 = 8;
+    const EPROPOSAL_ALREADY_EXECUTED: u64 = 9;
+    
+    // Special value to indicate a tie in voting results
+    const TIE_RESULT_ID: u64 = 18446744073709551615; // u64::MAX
 
     enum ProposalType has store, copy, drop {
         General,
@@ -34,7 +39,6 @@ module voting_addr::Voting {
         votes: Table<u64, u64>, // id => count
         voters: Table<address, bool>,
         deadline: u64,
-        executed: bool,
     }
 
     struct ProposalStore has key{
@@ -107,7 +111,6 @@ module voting_addr::Voting {
             votes: vote_table,
             voters: voter_table,
             deadline,
-            executed: false,
         };
 
         table::add(&mut store.proposals, id, proposal);
@@ -123,6 +126,7 @@ module voting_addr::Voting {
         let addr = signer::address_of(voter);
         let store = borrow_global_mut<ProposalStore>(contract_addr);
         let proposal = table::borrow_mut(&mut store.proposals, proposal_id);
+        
         assert!(timestamp::now_seconds() < proposal.deadline, EPROPOSAL_ENDED);
 
         let has_voted = table::contains(&proposal.voters, addr);
@@ -155,7 +159,7 @@ module voting_addr::Voting {
     public fun get_proposal_info(
         account: address,
         proposal_id: u64
-    ): (u64, address, String, String, ProposalType, vector<Option>, u64, bool) 
+    ): (u64, address, String, String, ProposalType, vector<Option>, u64) 
     acquires ProposalStore {
         let store = borrow_global<ProposalStore>(account);
         let proposal = table::borrow(&store.proposals, proposal_id);
@@ -168,8 +172,7 @@ module voting_addr::Voting {
             proposal.description,
             proposal.proposal_type,
             option_copy,
-            proposal.deadline,
-            proposal.executed
+            proposal.deadline
         )
     }
     #[view]
@@ -201,7 +204,7 @@ module voting_addr::Voting {
         table::contains(&proposal.voters, voter)
     }
 
-    // Function to get proposal active status
+    // Check if proposal is still active
     #[view]
     public fun is_active(
         account: address,
@@ -209,9 +212,9 @@ module voting_addr::Voting {
     ): bool acquires ProposalStore {
         let store = borrow_global<ProposalStore>(account);
         let proposal = table::borrow(&store.proposals, proposal_id);
-        !proposal.executed && (timestamp::now_seconds() < proposal.deadline)
+        timestamp::now_seconds() < proposal.deadline
     }
-    // Add getter for option details
+    
     #[view]
     public fun get_option(
         account: address,
@@ -223,26 +226,44 @@ module voting_addr::Voting {
         let option = vector::borrow(&proposal.options, option_id);
         (option.id, option.name)
     }
-
-    // Mark a proposal as executed
-    public entry fun execute_proposal(
-        executor: &signer,
-        contract_addr: address,
+    #[view]
+    public fun get_winning_option(
+        account: address,
         proposal_id: u64
-    ) acquires ProposalStore {
-        // Only proposal creator or contract owner can execute
-        let executor_address = signer::address_of(executor);
-        let store = borrow_global_mut<ProposalStore>(contract_addr);
-        let proposal = table::borrow_mut(&mut store.proposals, proposal_id);
+    ): (u64, String, u64) acquires ProposalStore {
+        let store = borrow_global<ProposalStore>(account);
+        let proposal = table::borrow(&store.proposals, proposal_id);
+        assert!(timestamp::now_seconds() >= proposal.deadline, EDEADLINE_NOT_PASSED);
+        
+        let options = &proposal.options;
+        let winning_id = 0;
+        let max_votes = 0;
+        let i = 0;
+        let tie = false;
+        
+        // First pass: find the maximum votes
+        while (i < vector::length(options)) {
+            let votes = *table::borrow(&proposal.votes, i);
+            if (votes > max_votes) {
+                max_votes = votes;
+                winning_id = i;
+                tie = false;
+            } else if (votes == max_votes && votes > 0) {
+                tie = true;
+            };
+            i = i + 1;
+        };
 
-        // Ensure proposal deadline has passed
-        assert!(timestamp::now_seconds() >= proposal.deadline, EPROPOSAL_ENDED);
-        // Ensure proposal hasn't already been executed
-        assert!(!proposal.executed, EPROPOSAL_ENDED);
-        // Ensure executor is either the proposal creator or contract owner
-        assert!(executor_address == proposal.creator || executor_address == contract_addr, 0);
-
-        // Mark proposal as executed
-        proposal.executed = true;
+        // If no votes were cast (max_votes is 0), return a special "no votes" result
+        if (max_votes == 0) {
+            (TIE_RESULT_ID, string::utf8(b"No Votes"), 0)
+        } else if (tie) {
+            // Return a special "Tie" result with id = u64::MAX
+            (TIE_RESULT_ID, string::utf8(b"Tie"), max_votes)
+        } else {
+            let winning_option = vector::borrow(options, winning_id);
+            (winning_option.id, winning_option.name, max_votes)
+        }
     }
+
 }

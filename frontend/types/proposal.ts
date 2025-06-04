@@ -11,6 +11,5 @@ export interface Proposal {
     proposalType: string;
     options: ProposalOption[];
     deadline: number;
-    executed: boolean;
     isActive?: boolean;
 }
