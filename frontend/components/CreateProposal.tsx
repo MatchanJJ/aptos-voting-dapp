@@ -43,7 +43,6 @@ export const CreateProposal = () => {
                 throw new Error("Invalid deadline value");
             }
 
-    
             const numericProposalType = Number(proposalType);
             if (isNaN(numericProposalType)) {
                 throw new Error('Invalid proposal type value');
