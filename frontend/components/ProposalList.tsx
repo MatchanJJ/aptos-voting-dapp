@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getProposals, Proposal, getProposalStatus, getTotalVotes } from "../view-functions";
 import { Card } from "./ui/card";
+import { getTimeAgo, getTimeLeft } from "@/utils/time";
 
 type ProposalFilter = 'all' | 'active' | 'inactive';
 
@@ -44,11 +45,20 @@ export const ProposalList: React.FC<ProposalListProps> = ({ filter }) => {
     if (loading) return <div>Loading proposals...</div>;
     if (!proposals.length) return <div>No proposals found</div>;
 
-    const filteredProposals = proposals.filter(proposal => {
-        if (filter === 'active') return proposal.isActive;
-        if (filter === 'inactive') return !proposal.isActive;
-        return true;
-    });
+    const filteredProposals = proposals
+        .filter(proposal => {
+            if (filter === 'active') return proposal.isActive;
+            if (filter === 'inactive') return !proposal.isActive;
+            return true;
+        })
+        .sort((a, b) => {
+            if (a.isActive && b.isActive) {
+                return a.deadline - b.deadline;
+            }
+            if (a.isActive && !b.isActive) return -1;
+            if (!a.isActive && b.isActive) return 1;
+            return b.deadline - a.deadline;
+        });
 
     return (
         <div className="grid gap-4 p-4">
@@ -82,7 +92,11 @@ export const ProposalList: React.FC<ProposalListProps> = ({ filter }) => {
                             Created by: {proposal.creator.slice(0, 6)}...{proposal.creator.slice(-4)}
                         </div>
                         <div className="text-sm text-gray-500">
-                            Deadline: {new Date(proposal.deadline * 1000).toLocaleString()}
+                            {proposal.isActive ? (
+                                <>Time left: {getTimeLeft(proposal.deadline)}</>
+                            ) : (
+                                <>Ended: {getTimeAgo(proposal.deadline)}</>
+                            )}
                         </div>
                     </div>
                 </Card>
